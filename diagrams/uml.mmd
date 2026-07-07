@@ -25,7 +25,7 @@ classDiagram
         +str title
         +int duration_minutes
         +str priority
-        +str preferred_time
+        +int preferred_time
         +str recurrence
         +str category
         +priority_score() int
@@ -33,12 +33,11 @@ classDiagram
     }
 
     class Scheduler {
-        +list~Task~ tasks
-        +int available_minutes
-        +str start_time
-        +sort_tasks() list~Task~
-        +filter_tasks() list~Task~
-        +resolve_conflicts() list~Task~
+        +Owner owner
+        +int start_time
+        +sort_tasks(tasks list~Task~) list~Task~
+        +filter_tasks(tasks list~Task~) list~Task~
+        +resolve_conflicts(tasks list~Task~) list~Task~
         +build_plan() Plan
     }
 
@@ -53,14 +52,15 @@ classDiagram
 
     class ScheduledTask {
         +Task task
-        +str start_time
-        +str end_time
+        +Pet pet
+        +int start_time
+        +int end_time
     }
 
     Owner "1" --> "0..*" Pet : owns
     Pet "1" --> "0..*" Task : has
-    Scheduler ..> Task : reads
-    Scheduler ..> Owner : uses constraints
+    Scheduler --> "1" Owner : reads tasks + constraints
     Scheduler ..> Plan : produces
     Plan "1" --> "0..*" ScheduledTask : contains
     ScheduledTask "1" --> "1" Task : wraps
+    ScheduledTask "1" --> "1" Pet : attributed to

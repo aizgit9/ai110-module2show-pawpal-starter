@@ -12,10 +12,19 @@ Three core actions:
 - Briefly describe your initial UML design.
 - What classes did you include, and what responsibilities did you assign to each?
 
+    Task — Represents a single pet-care activity along with its duration, priority, and timing details.
+    Pet — Represents a pet and manages the list of care tasks that belong to it.
+    Owner — Represents the app user, holding their pets, daily time budget, and scheduling preferences.
+    ScheduledTask — Pairs a single task with a concrete start and end time.
+    Plan — Represents the generated daily schedule, tracking which tasks were included or skipped and explaining why.
+    Scheduler — The engine that sorts, filters, and arranges tasks under the owner's constraints to build the final plan.
+
 **b. Design changes**
 
 - Did your design change during implementation?
 - If yes, describe at least one change and why you made it.
+
+    Yes. Times were changed from strings to integers, tracking the minutes since midnight. This is because the scheduling methods work more efficiently when they don't have to parse the string in every operation. They can now use the time as an integer directly.
 
 ---
 
