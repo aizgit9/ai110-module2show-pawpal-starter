@@ -41,6 +41,11 @@ def main() -> None:
     biscuit.add_task(Task("Feeding", 10, "high", preferred_time=hhmm(9, 30), recurrence="daily"))
     mochi.add_task(Task("Feeding", 10, "high", preferred_time=hhmm(9), recurrence="daily"))
 
+    # Two tasks deliberately requesting the SAME 08:00 slot -> a conflict.
+    # Mochi's Morning walk (08:00) already occupies that window; the vet call
+    # for Biscuit collides with it across different pets.
+    biscuit.add_task(Task("Vet call", 20, "high", preferred_time=hhmm(8)))
+
     owner.add_pet(mochi)
     owner.add_pet(biscuit)
 
@@ -89,8 +94,19 @@ def main() -> None:
           f"same time={format_time(next_walk.sort_key()) if next_walk else 'n/a'}")
     print(f"  Mochi's open task count: {before} -> {after} (unchanged: one done, one fresh)")
 
-    # --- Generate the plan ----------------------------------------------
+    # --- Conflict detection ---------------------------------------------
     scheduler = Scheduler(owner, start_time=hhmm(8))
+    print("\n" + "=" * 52)
+    print("Conflict detection")
+    print("=" * 52)
+    conflicts = scheduler.detect_conflicts()
+    if conflicts:
+        for warning in conflicts:
+            print(f"  [!] {warning}")
+    else:
+        print("  No conflicts detected.")
+
+    # --- Generate the plan ----------------------------------------------
     plan = scheduler.build_plan()
 
     # --- Print "Today's Schedule" ---------------------------------------

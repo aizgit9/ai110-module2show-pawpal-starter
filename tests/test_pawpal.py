@@ -203,6 +203,57 @@ class TestSchedulerHelpers:
         kept = [t.title for t in sched.filter_tasks(tasks)]
         assert kept == ["ok"]
 
+    def test_detect_conflicts_none_when_times_dont_overlap(self):
+        owner = Owner("J")
+        pet = Pet("Mochi", "dog")
+        pet.add_task(Task("Walk", 30, preferred_time=hhmm(8)))  # 08:00-08:30
+        pet.add_task(Task("Feed", 10, preferred_time=hhmm(9)))  # 09:00-09:10
+        owner.add_pet(pet)
+        assert Scheduler(owner).detect_conflicts() == []
+
+    def test_detect_conflicts_flags_overlap_across_pets(self):
+        owner = Owner("J")
+        mochi, biscuit = Pet("Mochi", "dog"), Pet("Biscuit", "cat")
+        mochi.add_task(Task("Walk", 30, preferred_time=hhmm(8)))  # 08:00-08:30
+        biscuit.add_task(Task("Vet call", 20, preferred_time=hhmm(8, 15)))  # overlaps
+        owner.add_pet(mochi)
+        owner.add_pet(biscuit)
+        conflicts = Scheduler(owner).detect_conflicts()
+        assert len(conflicts) == 1
+        assert "Walk" in conflicts[0] and "Vet call" in conflicts[0]
+        assert "different pets" in conflicts[0]
+
+    def test_detect_conflicts_flags_same_pet_overlap(self):
+        owner = Owner("J")
+        pet = Pet("Mochi", "dog")
+        pet.add_task(Task("Walk", 30, preferred_time=hhmm(8)))
+        pet.add_task(Task("Play", 15, preferred_time=hhmm(8)))  # same slot
+        owner.add_pet(pet)
+        conflicts = Scheduler(owner).detect_conflicts()
+        assert len(conflicts) == 1
+        assert "same pet" in conflicts[0]
+
+    def test_detect_conflicts_ignores_completed_tasks(self):
+        owner = Owner("J")
+        pet = Pet("Mochi", "dog")
+        done = Task("Walk", 30, preferred_time=hhmm(8))
+        done.mark_complete()
+        pet.add_task(done)
+        pet.add_task(Task("Play", 15, preferred_time=hhmm(8)))
+        owner.add_pet(pet)
+        assert Scheduler(owner).detect_conflicts() == []
+
+    def test_build_plan_populates_warnings(self):
+        owner = Owner("J", available_minutes=999)
+        mochi, biscuit = Pet("Mochi", "dog"), Pet("Biscuit", "cat")
+        mochi.add_task(Task("Walk", 30, preferred_time=hhmm(8)))
+        biscuit.add_task(Task("Vet call", 20, preferred_time=hhmm(8)))
+        owner.add_pet(mochi)
+        owner.add_pet(biscuit)
+        plan = Scheduler(owner).build_plan()
+        assert plan.warnings  # conflict surfaced on the plan
+        assert "Conflicts" in plan.explain()
+
     def test_resolve_conflicts_orders_preferred_times_chronologically(self):
         sched = Scheduler(Owner("J", available_minutes=999))
         tasks = [

@@ -172,6 +172,7 @@ class Plan:
     included: list[Task] = field(default_factory=list)
     skipped: list[Task] = field(default_factory=list)
     total_minutes: int = 0
+    warnings: list[str] = field(default_factory=list)
 
     def explain(self) -> str:
         """Return a human-readable explanation of why tasks were chosen/skipped."""
@@ -192,6 +193,12 @@ class Plan:
             lines.append("Skipped (didn't fit the day's time budget or ran past day's end):")
             for task in self.skipped:
                 lines.append(f"  - {task.summary()}")
+
+        if self.warnings:
+            lines.append("")
+            lines.append("[!] Conflicts:")
+            for warning in self.warnings:
+                lines.append(f"  - {warning}")
 
         lines.append("")
         lines.append(f"Total scheduled time: {self.total_minutes} min")
@@ -264,6 +271,45 @@ class Scheduler:
         without_pref = [t for t in tasks if t.preferred_time is None]
         return with_pref + without_pref
 
+    def detect_conflicts(self) -> list[str]:
+        """Return warning strings for tasks whose requested time windows overlap.
+
+        Lightweight and non-throwing: compares every pair of open tasks that
+        request a specific ``preferred_time``, using each task's
+        ``[preferred_time, preferred_time + duration)`` window. Overlaps within
+        the same pet or across different pets are both reported. Returns an empty
+        list when there are no conflicts.
+
+        These are warnings about what the owner *requested* — ``build_plan``
+        still resolves them by bumping the later task, so the program never
+        crashes; the message just flags that two things were asked for at once.
+        """
+        # Gather (task, pet) for open tasks that request a specific time, sorted
+        # by start so we only compare tasks that could actually overlap.
+        timed: list[tuple[Task, Pet]] = sorted(
+            (
+                (task, pet)
+                for pet in self.owner.pets
+                for task in pet.tasks
+                if not task.completed and task.preferred_time is not None
+            ),
+            key=lambda pair: pair[0].preferred_time,
+        )
+
+        warnings: list[str] = []
+        for i, (task_a, pet_a) in enumerate(timed):
+            a_end = task_a.preferred_time + max(task_a.duration_minutes, 0)
+            for task_b, pet_b in timed[i + 1 :]:
+                if task_b.preferred_time >= a_end:
+                    break  # sorted by start: nothing later can overlap task_a
+                same = "same pet" if pet_a is pet_b else "different pets"
+                warnings.append(
+                    f"'{task_a.title}' ({pet_a.name}) at {format_time(task_a.preferred_time)} "
+                    f"overlaps '{task_b.title}' ({pet_b.name}) at "
+                    f"{format_time(task_b.preferred_time)} [{same}]"
+                )
+        return warnings
+
     def build_plan(self) -> Plan:
         """Gather all pets' tasks, apply sort -> filter -> resolve, and lay them out as a Plan."""
         # Flatten tasks across pets while remembering which pet owns each one.
@@ -314,4 +360,5 @@ class Scheduler:
         included_ids = {id(t) for t in plan.included}
         plan.skipped = [t for t in all_tasks if id(t) not in included_ids]
         plan.total_minutes = sum(t.duration_minutes for t in plan.included)
+        plan.warnings = self.detect_conflicts()
         return plan
