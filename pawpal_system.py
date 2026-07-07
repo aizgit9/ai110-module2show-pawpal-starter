@@ -10,7 +10,11 @@ detection, sorting) simple and avoids repeated string parsing.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
+
+
+# Recurrence values that spawn a follow-up task when completed.
+RECURRING = ("daily", "weekly")
 
 
 # Priority labels used by the UI, mapped to a sortable numeric score.
@@ -35,13 +39,38 @@ class Task:
     category: str | None = None
     completed: bool = False
 
-    def mark_complete(self) -> None:
-        """Mark this task as done."""
+    def next_occurrence(self) -> "Task | None":
+        """Return a fresh, un-completed copy for the next occurrence.
+
+        Only daily/weekly tasks recur; one-off tasks return None. This model
+        tracks time-of-day (``preferred_time``) but not calendar dates, so the
+        "next occurrence" is an identical task ready to be scheduled again — the
+        same time-of-day, priority, duration, and recurrence, reset to open.
+        """
+        if self.recurrence not in RECURRING:
+            return None
+        return replace(self, completed=False)
+
+    def mark_complete(self) -> "Task | None":
+        """Mark this task done and return its next occurrence, if it recurs.
+
+        For a daily/weekly task, returns a fresh un-completed copy so the caller
+        can add it back to the pet; returns None for one-off tasks.
+        """
         self.completed = True
+        return self.next_occurrence()
 
     def priority_score(self) -> int:
         """Return a sortable numeric score for this task's priority (unknown -> 0)."""
         return PRIORITY_SCORES.get(self.priority, 0)
+
+    def sort_key(self) -> int:
+        """Chronological sort key (minutes since midnight); untimed tasks sort last.
+
+        Keeps the ``preferred_time is None`` guard in one place so callers can do
+        ``sorted(tasks, key=Task.sort_key)`` without a lambda.
+        """
+        return self.preferred_time if self.preferred_time is not None else 24 * 60
 
     def summary(self) -> str:
         """Return a human-readable one-line description of the task."""
@@ -99,6 +128,25 @@ class Owner:
     def get_available_time(self) -> int:
         """Return the total minutes available for the day."""
         return self.available_minutes
+
+    def find_tasks(
+        self, *, completed: bool | None = None, pet_name: str | None = None
+    ) -> list[Task]:
+        """Return this owner's tasks, optionally filtered by completion and/or pet name.
+
+        Both filters are optional and keyword-only; passing both narrows to tasks
+        matching *both* (logical AND). With no arguments, returns every task
+        across all pets.
+        """
+        matches: list[Task] = []
+        for pet in self.pets:
+            if pet_name is not None and pet.name != pet_name:
+                continue
+            for task in pet.tasks:
+                if completed is not None and task.completed != completed:
+                    continue
+                matches.append(task)
+        return matches
 
 
 @dataclass

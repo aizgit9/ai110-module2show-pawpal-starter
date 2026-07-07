@@ -42,6 +42,28 @@ class TestTask:
         assert "30" in s
         assert "high" in s
 
+    def test_mark_complete_returns_none_for_one_off_task(self):
+        task = Task("Vet visit", 60)  # no recurrence
+        assert task.mark_complete() is None
+        assert task.completed is True
+
+    @pytest.mark.parametrize("recurrence", ["daily", "weekly"])
+    def test_mark_complete_spawns_next_occurrence(self, recurrence):
+        task = Task("Walk", 30, "high", preferred_time=hhmm(8), recurrence=recurrence)
+        nxt = task.mark_complete()
+
+        assert task.completed is True  # original is done
+        assert nxt is not None
+        assert nxt is not task  # a distinct new instance
+        assert nxt.completed is False  # next occurrence starts open
+        # Everything else carries over unchanged.
+        assert (nxt.title, nxt.duration_minutes, nxt.priority) == ("Walk", 30, "high")
+        assert nxt.preferred_time == hhmm(8)
+        assert nxt.recurrence == recurrence
+
+    def test_next_occurrence_none_for_non_recurring(self):
+        assert Task("One-off", 10).next_occurrence() is None
+
 
 # --------------------------------------------------------------------------
 # format_time
@@ -107,6 +129,44 @@ class TestOwner:
         a, b = Owner("A"), Owner("B")
         a.add_pet(Pet("X", "dog"))
         assert b.pets == []
+
+    def _owner_two_pets(self):
+        owner = Owner("Jordan")
+        mochi = Pet("Mochi", "dog")
+        biscuit = Pet("Biscuit", "cat")
+        walk = Task("Walk", 30)
+        walk.mark_complete()
+        mochi.add_task(walk)
+        mochi.add_task(Task("Feed Mochi", 10))
+        biscuit.add_task(Task("Groom", 45))
+        owner.add_pet(mochi)
+        owner.add_pet(biscuit)
+        return owner
+
+    def test_find_tasks_no_filters_returns_all(self):
+        titles = [t.title for t in self._owner_two_pets().find_tasks()]
+        assert sorted(titles) == ["Feed Mochi", "Groom", "Walk"]
+
+    def test_find_tasks_by_pet_name(self):
+        titles = [t.title for t in self._owner_two_pets().find_tasks(pet_name="Mochi")]
+        assert sorted(titles) == ["Feed Mochi", "Walk"]
+
+    def test_find_tasks_by_completion_status(self):
+        owner = self._owner_two_pets()
+        assert [t.title for t in owner.find_tasks(completed=True)] == ["Walk"]
+        assert sorted(t.title for t in owner.find_tasks(completed=False)) == [
+            "Feed Mochi",
+            "Groom",
+        ]
+
+    def test_find_tasks_combines_both_filters(self):
+        owner = self._owner_two_pets()
+        # Only Mochi's still-open tasks.
+        titles = [t.title for t in owner.find_tasks(pet_name="Mochi", completed=False)]
+        assert titles == ["Feed Mochi"]
+
+    def test_find_tasks_unknown_pet_returns_empty(self):
+        assert self._owner_two_pets().find_tasks(pet_name="Nobody") == []
 
 
 # --------------------------------------------------------------------------

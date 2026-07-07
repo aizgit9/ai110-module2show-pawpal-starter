@@ -101,7 +101,11 @@ if pet.list_tasks():
         with done_col2:
             st.write("")  # spacer to align the button with the selectbox
             if st.button("Mark done"):
-                to_complete.mark_complete()
+                # For a recurring task, mark_complete() hands back the next
+                # occurrence; add it so the chore reappears for next time.
+                next_task = to_complete.mark_complete()
+                if next_task is not None:
+                    pet.add_task(next_task)
                 st.rerun()
 else:
     st.info("No tasks yet. Add one above.")
