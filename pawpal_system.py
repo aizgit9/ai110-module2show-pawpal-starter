@@ -113,6 +113,7 @@ class ScheduledTask:
     pet: Pet
     start_time: int  # minutes since midnight
     end_time: int  # minutes since midnight
+    bumped: bool = False  # True if a preferred_time couldn't be honored and the task was moved
 
 
 @dataclass
@@ -131,13 +132,16 @@ class Plan:
             lines.append("Planned:")
             for item in self.items:
                 when = f"{format_time(item.start_time)}-{format_time(item.end_time)}"
-                lines.append(f"  {when}  {item.task.title} (for {item.pet.name})")
+                line = f"  {when}  {item.task.title} (for {item.pet.name})"
+                if item.bumped:
+                    line += f"  [preferred {format_time(item.task.preferred_time)} unavailable, moved]"
+                lines.append(line)
         else:
             lines.append("Nothing could be scheduled within the available time.")
 
         if self.skipped:
             lines.append("")
-            lines.append("Skipped (not enough time in the day's budget):")
+            lines.append("Skipped (didn't fit the day's time budget or ran past day's end):")
             for task in self.skipped:
                 lines.append(f"  - {task.summary()}")
 
@@ -170,10 +174,16 @@ class Scheduler:
     and each is testable in isolation.
     """
 
-    def __init__(self, owner: Owner, start_time: int = 480) -> None:
-        """Create a scheduler for an owner, starting the day at start_time (min-since-midnight)."""
+    def __init__(self, owner: Owner, start_time: int = 480, end_of_day: int = 24 * 60) -> None:
+        """Create a scheduler for an owner, starting the day at start_time (min-since-midnight).
+
+        `end_of_day` is a hard wall (default midnight, 1440): no task is laid out
+        so that it ends after this, which keeps clock times from wrapping past
+        24:00 in the display.
+        """
         self.owner = owner
         self.start_time = start_time  # minutes since midnight (default 08:00)
+        self.end_of_day = end_of_day
 
     def sort_tasks(self, tasks: list[Task]) -> list[Task]:
         """Return tasks ordered by priority (high first), then duration (short first)."""
@@ -193,7 +203,12 @@ class Scheduler:
         return kept
 
     def resolve_conflicts(self, tasks: list[Task]) -> list[Task]:
-        """Order preferred-time tasks chronologically first, then the rest, so slots don't overlap."""
+        """Order preferred-time tasks chronologically first, then the rest.
+
+        This only fixes the *order* tasks are considered in; `build_plan` is what
+        actually prevents overlap, by advancing a monotonic cursor so each slot
+        starts no earlier than the previous one ended.
+        """
         with_pref = sorted(
             (t for t in tasks if t.preferred_time is not None),
             key=lambda t: t.preferred_time,
@@ -204,11 +219,14 @@ class Scheduler:
     def build_plan(self) -> Plan:
         """Gather all pets' tasks, apply sort -> filter -> resolve, and lay them out as a Plan."""
         # Flatten tasks across pets while remembering which pet owns each one.
-        # Keyed by id() so duplicate-looking tasks stay distinct.
+        # Keyed by id() so duplicate-looking tasks stay distinct. Completed tasks
+        # are dropped up front so a finished chore doesn't consume today's budget.
         task_to_pet: dict[int, Pet] = {}
         all_tasks: list[Task] = []
         for pet in self.owner.pets:
             for task in pet.tasks:
+                if task.completed:
+                    continue
                 task_to_pet[id(task)] = pet
                 all_tasks.append(task)
 
@@ -220,15 +238,26 @@ class Scheduler:
         cursor = self.start_time
         for task in resolved:
             start = cursor
-            if task.preferred_time is not None and task.preferred_time >= cursor:
-                start = task.preferred_time
+            bumped = False
+            if task.preferred_time is not None:
+                if task.preferred_time >= cursor:
+                    start = task.preferred_time
+                else:
+                    # Preferred slot has already passed; pack at the cursor and
+                    # record that we couldn't honor the request.
+                    bumped = True
             end = start + task.duration_minutes
+            if end > self.end_of_day:
+                # Would run past the day's end; leave it out (falls into skipped).
+                # Don't advance the cursor, so a later shorter task can still fit.
+                continue
             plan.items.append(
                 ScheduledTask(
                     task=task,
                     pet=task_to_pet[id(task)],
                     start_time=start,
                     end_time=end,
+                    bumped=bumped,
                 )
             )
             plan.included.append(task)

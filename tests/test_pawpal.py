@@ -210,6 +210,50 @@ class TestBuildPlan:
         assert plan.items == []
         assert plan.total_minutes == 0
 
+    def test_completed_tasks_are_not_scheduled_or_skipped(self):
+        # A finished chore should disappear entirely: not planned, not in the
+        # skipped list, and not counted against the day's budget.
+        owner = Owner("Jordan", available_minutes=200)
+        pet = Pet("Mochi", "dog")
+        done = Task("Morning walk", 30, "high")
+        done.mark_complete()
+        pet.add_task(done)
+        pet.add_task(Task("Feed", 10, "high"))
+        owner.add_pet(pet)
+
+        plan = Scheduler(owner, start_time=hhmm(8)).build_plan()
+        titles = [t.title for t in plan.included]
+        assert "Morning walk" not in titles
+        assert "Morning walk" not in [t.title for t in plan.skipped]
+        assert plan.total_minutes == 10  # only the un-completed Feed counts
+
+    def test_task_running_past_end_of_day_is_skipped(self):
+        # Budget is generous, but the day ends at midnight; a task that would
+        # end after that is dropped rather than wrapping to "25:xx".
+        owner = Owner("Jordan", available_minutes=999)
+        pet = Pet("Mochi", "dog")
+        pet.add_task(Task("Late feeding", 60, preferred_time=hhmm(23, 30)))
+        owner.add_pet(pet)
+
+        plan = Scheduler(owner, start_time=hhmm(8), end_of_day=hhmm(24)).build_plan()
+        assert "Late feeding" in [t.title for t in plan.skipped]
+        assert plan.items == []
+
+    def test_bumped_flag_set_when_preferred_time_already_passed(self):
+        # Two tasks both prefer the same slot; the second can't get it and is
+        # packed after the first, with bumped=True recorded.
+        owner = Owner("Jordan", available_minutes=999)
+        pet = Pet("Mochi", "dog")
+        pet.add_task(Task("Walk", 30, "high", preferred_time=hhmm(8)))
+        pet.add_task(Task("Play", 30, "high", preferred_time=hhmm(8)))
+        owner.add_pet(pet)
+
+        plan = Scheduler(owner, start_time=hhmm(8)).build_plan()
+        second = next(i for i in plan.items if i.task.title == "Play")
+        assert second.bumped is True
+        assert second.start_time >= hhmm(8, 30)  # moved to after the Walk
+        assert "unavailable, moved" in plan.explain()
+
 
 # --------------------------------------------------------------------------
 # Two simple behavior checks
