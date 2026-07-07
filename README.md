@@ -80,14 +80,52 @@ Sample test output:
 
 ## 📐 Smarter Scheduling
 
-> Fill in once you've implemented scheduling logic.
+Beyond the basic plan, PawPal+ implements four "smarter scheduling" behaviors.
+Each is a small, pure, independently testable method in `pawpal_system.py`.
 
 | Feature | Method(s) | Notes |
 |---------|-----------|-------|
-| Task sorting | | e.g., by priority, duration |
-| Filtering | | e.g., skip tasks if time runs out |
-| Conflict handling | | e.g., overlapping time slots |
-| Recurring tasks | | e.g., daily vs. weekly |
+| Sorting | `Task.sort_key()`, `Scheduler.sort_tasks()` | Chronological vs. priority ordering |
+| Filtering | `Owner.find_tasks()`, `Scheduler.filter_tasks()` | By pet / completion, and by time budget |
+| Conflict detection | `Scheduler.detect_conflicts()` | Warns on overlapping requested times |
+| Recurring tasks | `Task.mark_complete()`, `Task.next_occurrence()` | Daily/weekly tasks respawn when done |
+
+### Sorting behavior
+
+Two complementary orderings:
+
+- **`Task.sort_key()`** returns a chronological sort key (minutes since midnight),
+  sending untimed tasks to the end. Callers sort with `sorted(tasks, key=Task.sort_key)` —
+  used by `Scheduler.resolve_conflicts()` to lay tasks out in clock order.
+- **`Scheduler.sort_tasks()`** orders by priority (high first), breaking ties by
+  shorter duration, so the day's time budget is spent on what matters most first.
+
+### Filtering behavior
+
+- **`Owner.find_tasks(completed=None, pet_name=None)`** returns tasks filtered by
+  completion status and/or pet name (both optional, combined with AND). Completed
+  chores are also dropped automatically inside `Scheduler.build_plan()` so a
+  finished task never consumes the day's budget.
+- **`Scheduler.filter_tasks()`** greedily keeps tasks that fit the owner's
+  available-minutes budget, skipping any with non-positive durations.
+
+### Conflict detection logic
+
+- **`Scheduler.detect_conflicts()`** is a lightweight, non-throwing pairwise scan
+  of open tasks that request a specific time. It compares each task's
+  `[preferred_time, preferred_time + duration)` window and returns a list of
+  warning strings (labeled *same pet* vs. *different pets*), rather than raising.
+  `build_plan()` stores these on `Plan.warnings`, and `Plan.explain()` surfaces
+  them. The plan still resolves overlaps by bumping the later task (see the
+  `bumped` flag on `ScheduledTask`), so a conflict warns without breaking the plan.
+
+### Recurring task logic
+
+- **`Task.mark_complete()`** marks a task done and, if it recurs, returns the next
+  occurrence. **`Task.next_occurrence()`** produces that fresh, un-completed copy
+  for `daily`/`weekly` tasks (and `None` for one-offs). The owning `Pet` re-adds
+  the returned task, so a daily walk reappears for next time the moment it's
+  checked off.
 
 ## 📸 Demo Walkthrough
 

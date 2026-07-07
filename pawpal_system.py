@@ -263,13 +263,21 @@ class Scheduler:
         This only fixes the *order* tasks are considered in; `build_plan` is what
         actually prevents overlap, by advancing a monotonic cursor so each slot
         starts no earlier than the previous one ended.
+
+        Task.sort_key sends untimed tasks to the end (24*60), and sorted() is
+        stable, so they keep their original relative order after the timed ones.
+
+        Tradeoff: this single sort replaced an explicit "filter timed / filter
+        untimed / concatenate" two-pass. We gained readability and one source of
+        truth for the None-handling rule, but correctness now *depends on* two
+        implicit facts — sort stability, and the 24*60 sentinel being strictly
+        larger than any real preferred_time. A task with preferred_time >= 1440
+        (a malformed past-midnight time) would interleave with untimed tasks
+        here, whereas the old is-None split was immune to the sentinel's value.
+        Reasonable because preferred_time is minutes-since-midnight (0..1439) by
+        construction, but worth knowing if that invariant ever loosens.
         """
-        with_pref = sorted(
-            (t for t in tasks if t.preferred_time is not None),
-            key=lambda t: t.preferred_time,
-        )
-        without_pref = [t for t in tasks if t.preferred_time is None]
-        return with_pref + without_pref
+        return sorted(tasks, key=Task.sort_key)
 
     def detect_conflicts(self) -> list[str]:
         """Return warning strings for tasks whose requested time windows overlap.

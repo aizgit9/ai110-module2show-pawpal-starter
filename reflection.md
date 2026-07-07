@@ -35,10 +35,21 @@ Three core actions:
 - What constraints does your scheduler consider (for example: time, priority, preferences)?
 - How did you decide which constraints mattered most?
 
+    The scheduler weighs four constraints: the owner's daily time budget, each
+    task's priority, its preferred time of day, and a hard end-of-day cutoff.
+    Priority matters most — tasks are sorted high-to-low (ties broken by shorter
+    duration) so the budget is spent on what matters before anything else, and
+    preferred times only shape when the already-chosen tasks are placed.
+
 **b. Tradeoffs**
 
 - Describe one tradeoff your scheduler makes.
 - Why is that tradeoff reasonable for this scenario?
+
+    I simplified resolve_conflicts to a single sorted(tasks, key=Task.sort_key),
+    trading an explicit two-pass for a shorter sort that leans on stable ordering
+    and a 24*60 sentinel. Reasonable because preferred_time is always 0–1439, so
+    the sentinel can never collide with a real time.
 
 ---
 
