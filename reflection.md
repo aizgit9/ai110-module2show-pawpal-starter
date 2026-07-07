@@ -2,6 +2,11 @@
 
 ## 1. System Design
 
+Three core actions: 
+    Track tasks by duration and priority
+    Schedule events
+    Log pet information
+    
 **a. Initial design**
 
 - Briefly describe your initial UML design.

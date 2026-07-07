@@ -1,15 +1,66 @@
 classDiagram
-    %% Replace the placeholders below with your actual classes, attributes, methods, and relationships.
-    %% Keep this file updated so it matches your final implementation.
-
-    class ClassName {
-        +type attribute
-        +method() returnType
+    class Owner {
+        +str name
+        +int available_minutes
+        +dict preferences
+        +list~Pet~ pets
+        +add_pet(pet Pet) void
+        +remove_pet(pet Pet) void
+        +set_preference(key str, value any) void
+        +get_available_time() int
     }
 
-    class AnotherClass {
-        +type attribute
-        +method() returnType
+    class Pet {
+        +str name
+        +str species
+        +str breed
+        +int age
+        +list~Task~ tasks
+        +add_task(task Task) void
+        +remove_task(task Task) void
+        +list_tasks() list~Task~
     }
 
-    ClassName --> AnotherClass : relationship
+    class Task {
+        +str title
+        +int duration_minutes
+        +str priority
+        +str preferred_time
+        +str recurrence
+        +str category
+        +priority_score() int
+        +summary() str
+    }
+
+    class Scheduler {
+        +list~Task~ tasks
+        +int available_minutes
+        +str start_time
+        +sort_tasks() list~Task~
+        +filter_tasks() list~Task~
+        +resolve_conflicts() list~Task~
+        +build_plan() Plan
+    }
+
+    class Plan {
+        +list~ScheduledTask~ items
+        +list~Task~ included
+        +list~Task~ skipped
+        +int total_minutes
+        +explain() str
+        +to_table() list~dict~
+    }
+
+    class ScheduledTask {
+        +Task task
+        +str start_time
+        +str end_time
+    }
+
+    Owner "1" --> "0..*" Pet : owns
+    Pet "1" --> "0..*" Task : has
+    Scheduler ..> Task : reads
+    Scheduler ..> Owner : uses constraints
+    Scheduler ..> Plan : produces
+    Plan "1" --> "0..*" ScheduledTask : contains
+    ScheduledTask "1" --> "1" Task : wraps
