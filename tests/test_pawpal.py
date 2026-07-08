@@ -64,6 +64,25 @@ class TestTask:
     def test_next_occurrence_none_for_non_recurring(self):
         assert Task("One-off", 10).next_occurrence() is None
 
+    def test_completing_daily_task_creates_task_for_following_day(self):
+        # The full recurrence lifecycle: completing today's daily walk yields a
+        # fresh occurrence the caller re-attaches, so the pet is left with one
+        # open task ready for the next day.
+        pet = Pet("Mochi", "dog")
+        walk = Task("Walk", 30, "high", preferred_time=hhmm(7), recurrence="daily")
+        pet.add_task(walk)
+
+        nxt = walk.mark_complete()
+        assert nxt is not None
+        pet.add_task(nxt)
+
+        open_tasks = [t for t in pet.list_tasks() if not t.completed]
+        assert len(open_tasks) == 1
+        tomorrow = open_tasks[0]
+        assert tomorrow is nxt and tomorrow is not walk  # brand-new instance
+        assert tomorrow.recurrence == "daily"  # keeps recurring
+        assert tomorrow.preferred_time == hhmm(7)  # same time-of-day carries over
+
 
 # --------------------------------------------------------------------------
 # format_time
@@ -233,6 +252,20 @@ class TestSchedulerHelpers:
         assert len(conflicts) == 1
         assert "same pet" in conflicts[0]
 
+    def test_detect_conflicts_flags_duplicate_times(self):
+        # Two open tasks requesting the exact same preferred_time is the clearest
+        # duplicate-time case; the scheduler must surface it as a conflict naming
+        # both tasks and their shared slot.
+        owner = Owner("J")
+        pet = Pet("Mochi", "dog")
+        pet.add_task(Task("Walk", 30, preferred_time=hhmm(8)))
+        pet.add_task(Task("Feed", 10, preferred_time=hhmm(8)))  # identical slot
+        owner.add_pet(pet)
+        conflicts = Scheduler(owner).detect_conflicts()
+        assert len(conflicts) == 1
+        assert "Walk" in conflicts[0] and "Feed" in conflicts[0]
+        assert "08:00" in conflicts[0]
+
     def test_detect_conflicts_ignores_completed_tasks(self):
         owner = Owner("J")
         pet = Pet("Mochi", "dog")
@@ -295,6 +328,16 @@ class TestBuildPlan:
     def test_total_minutes_matches_included(self):
         plan = Scheduler(self._owner_with_tasks(60)).build_plan()
         assert plan.total_minutes == sum(t.duration_minutes for t in plan.included)
+
+    def test_plan_items_returned_in_chronological_order(self):
+        # Tasks are added/sorted by priority, but the finished plan must read
+        # top-to-bottom in clock order. Walk prefers 08:00, Feed prefers 09:00,
+        # Groom is untimed and packs after them.
+        plan = Scheduler(self._owner_with_tasks(200), start_time=hhmm(8)).build_plan()
+        starts = [item.start_time for item in plan.items]
+        assert starts == sorted(starts)  # non-decreasing start times
+        # Explicit ordering: timed tasks in clock order, untimed last.
+        assert [i.task.title for i in plan.items] == ["Walk", "Feed Mochi", "Groom"]
 
     def test_slots_do_not_overlap(self):
         plan = Scheduler(self._owner_with_tasks(200), start_time=hhmm(8)).build_plan()

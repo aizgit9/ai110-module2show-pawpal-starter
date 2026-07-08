@@ -64,19 +64,63 @@ Total scheduled time: 100 min
 
 ## 🧪 Testing PawPal+
 
+Run the full test suite from the project root:
+
 ```bash
-# Run the full test suite:
-pytest
-
-# Run with coverage:
-pytest --cov
+python -m pytest
 ```
 
-Sample test output:
+### What the tests cover
+
+The suite (`tests/test_pawpal.py`, 49 tests) exercises the logic layer in
+`pawpal_system.py` across four areas:
+
+- **Data model** — `Task`, `Pet`, and `Owner` basics: priority scoring (including
+  the unknown-label fallback), human-readable summaries, `format_time`, adding/
+  removing/listing tasks and pets, `list_tasks()` returning a defensive copy, and
+  `Owner.find_tasks()` filtering by pet and/or completion status.
+- **Sorting** — priority ordering (high first, shorter-duration tie-break) and
+  chronological ordering, including that the finished plan reads top-to-bottom in
+  clock order with untimed tasks placed last.
+- **Filtering & budget** — greedy fit within the owner's available minutes and
+  skipping of non-positive durations; completed tasks are dropped and never
+  consume the day's budget; tasks running past the end-of-day wall are skipped.
+- **Conflict detection** — pairwise overlap warnings for open, timed tasks,
+  labeled *same pet* vs. *different pets*, including exact duplicate times, with
+  completed tasks ignored.
+- **Recurrence** — completing a `daily`/`weekly` task spawns a fresh, distinct,
+  open occurrence (carrying priority, duration, and time-of-day), while one-off
+  tasks return `None`; the full complete → re-attach-to-pet lifecycle is verified.
+- **Plan assembly (`build_plan`)** — non-overlapping slots, honored preferred
+  times, the `bumped` flag when a slot is unavailable, correct pet attribution,
+  `total_minutes` matching included tasks, and empty-owner handling.
+
+### Sample test output
 
 ```
-# Paste your pytest output here
+============================= test session starts =============================
+platform win32 -- Python 3.14.6, pytest-9.1.1, pluggy-1.6.0
+rootdir: c:\Users\asher\repos\ai110-module2show-pawpal-starter
+plugins: anyio-4.14.1
+collected 49 items
+
+tests\test_pawpal.py .................................................   [100%]
+
+============================= 49 passed in 0.09s ==============================
 ```
+
+### Confidence Level
+
+**★★★★☆ (4 / 5)**
+
+All 49 tests pass and cover the core scheduling behaviors — sorting, budget
+filtering, recurrence, conflict detection, and non-overlapping plan assembly —
+including their most important edge cases. One star is held back because the
+tests exercise the logic layer only (not the Streamlit UI in `app.py`), and a
+known interaction remains untested: a task admitted by `filter_tasks` can still
+be dropped by the end-of-day wall in `build_plan`, having already "spent" budget
+that a lower-priority task might otherwise have used. Solid for the logic layer;
+not yet a full end-to-end guarantee.
 
 ## 📐 Smarter Scheduling
 
