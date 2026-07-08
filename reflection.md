@@ -37,9 +37,7 @@ Three core actions:
 
     The scheduler weighs four constraints: the owner's daily time budget, each
     task's priority, its preferred time of day, and a hard end-of-day cutoff.
-    Priority matters most — tasks are sorted high-to-low (ties broken by shorter
-    duration) so the budget is spent on what matters before anything else, and
-    preferred times only shape when the already-chosen tasks are placed.
+    Priority matters most, tasks are sorted high-to-low so the budget is spent on what matters before anything else, and preferred times only shape when the already-chosen tasks are placed.
 
 **b. Tradeoffs**
 

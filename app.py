@@ -1,6 +1,6 @@
 import streamlit as st
 
-from pawpal_system import Owner, Pet, Task, Scheduler
+from pawpal_system import Owner, Pet, Task, Scheduler, format_time
 
 st.set_page_config(page_title="PawPal+", page_icon="🐾", layout="centered")
 
@@ -63,28 +63,46 @@ pet.species = species
 st.markdown("### Tasks")
 st.caption("Add care tasks for your pet. These feed directly into the scheduler.")
 
-col1, col2, col3 = st.columns(3)
+col1, col2, col3, col4 = st.columns(4)
 with col1:
     task_title = st.text_input("Task title", value="Morning walk")
 with col2:
     duration = st.number_input("Duration (minutes)", min_value=1, max_value=240, value=20)
 with col3:
     priority = st.selectbox("Priority", ["low", "medium", "high"], index=2)
+with col4:
+    pref_hour = st.number_input(
+        "Preferred hour",
+        min_value=-1,
+        max_value=23,
+        value=-1,
+        help="Hour of day to start this task (0–23). Leave at -1 for no preference.",
+    )
 
 if st.button("Add task"):
-    pet.add_task(Task(title=task_title, duration_minutes=int(duration), priority=priority))
+    preferred_time = None if pref_hour < 0 else int(pref_hour) * 60
+    pet.add_task(
+        Task(
+            title=task_title,
+            duration_minutes=int(duration),
+            priority=priority,
+            preferred_time=preferred_time,
+        )
+    )
 
 if pet.list_tasks():
-    st.write("Current tasks:")
+    st.write("**Current tasks** (sorted chronologically by preferred time):")
+    # Sort for display using the same key the scheduler uses (untimed tasks last).
     st.table(
         [
             {
+                "when": format_time(t.preferred_time) if t.preferred_time is not None else "any",
                 "title": t.title,
                 "duration_minutes": t.duration_minutes,
                 "priority": t.priority,
                 "done": "✓" if t.completed else "",
             }
-            for t in pet.list_tasks()
+            for t in sorted(pet.list_tasks(), key=Task.sort_key)
         ]
     )
 
@@ -125,15 +143,59 @@ with sched_col2:
 
 if st.button("Generate schedule"):
     owner.available_minutes = int(available_minutes)
-    plan = Scheduler(owner, start_time=int(start_hour) * 60).build_plan()
+    scheduler = Scheduler(owner, start_time=int(start_hour) * 60)
 
+    # Ask the scheduler about requested-time overlaps *before* building, so we
+    # can surface them as warnings even though build_plan resolves them anyway.
+    conflicts = scheduler.detect_conflicts()
+    plan = scheduler.build_plan()
+
+    # 1) Conflict warnings from Scheduler.detect_conflicts()
+    if conflicts:
+        st.warning(
+            f"**⚠️ {len(conflicts)} requested-time conflict(s) detected**\n\n"
+            + "\n".join(f"- {w}" for w in conflicts)
+        )
+
+    # 2) The plan itself
     if plan.items:
-        st.write("### Today's Schedule")
+        st.success(
+            f"✅ Scheduled {len(plan.included)} task(s) — "
+            f"{plan.total_minutes} min of {owner.available_minutes} min available."
+        )
+
+        st.markdown("### 📅 Today's Schedule")
         st.table(plan.to_table())
-        st.write(f"**Total scheduled time:** {plan.total_minutes} min")
-        with st.expander("Why this plan? (reasoning)"):
+
+        # Tasks that couldn't start at their requested time.
+        bumped = [item.task.title for item in plan.items if item.bumped]
+        if bumped:
+            st.info(
+                "🔀 Moved from preferred time (slot already taken): "
+                + ", ".join(bumped)
+            )
+
+        # 3) Filtered-out tasks: didn't fit the budget or ran past day's end.
+        if plan.skipped:
+            st.warning(
+                f"⏭️ {len(plan.skipped)} task(s) skipped — didn't fit the time "
+                "budget or ran past the end of the day:"
+            )
+            st.table(
+                [
+                    {
+                        "title": t.title,
+                        "duration_minutes": t.duration_minutes,
+                        "priority": t.priority,
+                    }
+                    for t in plan.skipped
+                ]
+            )
+
+        with st.expander("Why this plan? (full reasoning)"):
             st.text(plan.explain())
     else:
-        st.warning(
-            "No tasks could be scheduled. Add some tasks or increase the available time."
+        st.error(
+            "❌ No tasks could be scheduled. Add some open tasks or increase the "
+            "available time."
         )
