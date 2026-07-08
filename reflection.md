@@ -58,10 +58,14 @@ Three core actions:
 - How did you use AI tools during this project (for example: design brainstorming, debugging, refactoring)?
 - What kinds of prompts or questions were most helpful?
 
+    I used my AI assistant for help with the initial design, filling out the necessary code for each feature, and writing documentation. The most helpful prompts where when I provided a detailed multi line instruction set. Those worked quite well and got exactly what I needed done in a way that also reduced the margin for error.
+
 **b. Judgment and verification**
 
 - Describe one moment where you did not accept an AI suggestion as-is.
 - How did you evaluate or verify what the AI suggested?
+
+    When I wanted to update the UML diagram, it overwrote my old one. I asked it to roll back that change and create the uml_final file. This was the only major issue I had, and considering it was an error on my end. Overall the AI did a great job of suggesting exactly what I needed. I evaluated AI outputs like the class planning suggestions by checking if there was unnecessary or illogical components that weren't necessary for the purposes of this project.
 
 ---
 
@@ -72,11 +76,14 @@ Three core actions:
 - What behaviors did you test?
 - Why were these tests important?
 
+    We tested the core scheduling logic: sorting , budget filtering, conflict detection, recurrence, and plan assembly. These matter because they are the core features the owner must rely on to work correctly: right tasks chosen, sensibly ordered without double-booking, and recurring chores reliably reappearing.
+
 **b. Confidence**
 
 - How confident are you that your scheduler works correctly?
 - What edge cases would you test next if you had more time?
 
+    I am mostly confident that everything in my scheduler works correctly. A couple edge cases I could test: Budget spent on a task that then gets dropped by the end of day wall, and the same Task instance shared across two pets.
 ---
 
 ## 5. Reflection
@@ -85,10 +92,16 @@ Three core actions:
 
 - What part of this project are you most satisfied with?
 
+    I am most satisfied with how everything came together cleanly and my prompts were clear enough the get the AI to do exactly what I needed.
+
 **b. What you would improve**
 
 - If you had another iteration, what would you improve or redesign?
 
+    I think I would spend some time on how the app looks to improve the user experience. It's pretty basic at the moment
+
 **c. Key takeaway**
 
 - What is one important thing you learned about designing systems or working with AI on this project?
+
+    I learned that it is very important to spend plenty of time planning out your class structure before you jump in and start coding. This also helps the AI work more effectively.
