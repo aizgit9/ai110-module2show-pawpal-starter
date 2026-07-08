@@ -1,0 +1,77 @@
+classDiagram
+    class Owner {
+        +str name
+        +int available_minutes
+        +dict preferences
+        +list~Pet~ pets
+        +add_pet(pet Pet) void
+        +remove_pet(pet Pet) void
+        +set_preference(key str, value any) void
+        +get_available_time() int
+        +find_tasks(completed bool, pet_name str) list~Task~
+    }
+
+    class Pet {
+        +str name
+        +str species
+        +str breed
+        +int age
+        +list~Task~ tasks
+        +add_task(task Task) void
+        +remove_task(task Task) void
+        +list_tasks() list~Task~
+    }
+
+    class Task {
+        +str title
+        +int duration_minutes
+        +str priority
+        +int preferred_time
+        +str recurrence
+        +str category
+        +bool completed
+        +next_occurrence() Task|None
+        +mark_complete() Task|None
+        +priority_score() int
+        +sort_key() int
+        +summary() str
+    }
+
+    class Scheduler {
+        +Owner owner
+        +int start_time
+        +int end_of_day
+        +sort_tasks(tasks list~Task~) list~Task~
+        +filter_tasks(tasks list~Task~) list~Task~
+        +resolve_conflicts(tasks list~Task~) list~Task~
+        +detect_conflicts() list~str~
+        +build_plan() Plan
+    }
+
+    class Plan {
+        +list~ScheduledTask~ items
+        +list~Task~ included
+        +list~Task~ skipped
+        +int total_minutes
+        +list~str~ warnings
+        +explain() str
+        +to_table() list~dict~
+    }
+
+    class ScheduledTask {
+        +Task task
+        +Pet pet
+        +int start_time
+        +int end_time
+        +bool bumped
+    }
+
+    Owner "1" --> "0..*" Pet : owns
+    Pet "1" --> "0..*" Task : has
+    Task ..> Task : spawns (next_occurrence)
+    Scheduler --> "1" Owner : reads tasks + constraints
+    Scheduler ..> Plan : produces
+    Scheduler ..> ScheduledTask : creates
+    Plan "1" --> "0..*" ScheduledTask : contains
+    ScheduledTask "1" --> "1" Task : wraps
+    ScheduledTask "1" --> "1" Pet : attributed to

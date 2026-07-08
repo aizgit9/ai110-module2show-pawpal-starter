@@ -22,6 +22,21 @@ Your final app should:
 - Display the plan clearly (and ideally explain the reasoning)
 - Include tests for the most important scheduling behaviors
 
+## ✨ Features
+
+The implemented scheduling algorithms (all in `pawpal_system.py`):
+
+- **Priority-first planning** — tasks ordered high→low priority, ties broken by shorter duration (`Scheduler.sort_tasks()`).
+- **Sorting by time** — the chosen tasks are laid out in clock order, with untimed tasks placed last (`Task.sort_key()`, used by `Scheduler.resolve_conflicts()`).
+- **Time-budget filtering** — greedily keeps only the tasks that fit the owner's available minutes, skipping non-positive durations (`Scheduler.filter_tasks()`).
+- **Filtering by pet or completion status** — query tasks across all pets, combinable with AND (`Owner.find_tasks()`).
+- **Completed-task exclusion** — finished chores are dropped and never consume the day's budget (`Scheduler.build_plan()`).
+- **End-of-day cutoff** — tasks that would run past the day's end are skipped rather than producing invalid past-midnight times.
+- **Conflict warnings** — non-crashing detection of overlapping requested times, labeled *same pet* vs. *different pets* (`Scheduler.detect_conflicts()`).
+- **Preferred-time bumping** — when two tasks want the same slot, the later one is moved instead of overlapping, and flagged (`ScheduledTask.bumped`).
+- **Daily/weekly recurrence** — completing a recurring task spawns a fresh occurrence for next time (`Task.mark_complete()`, `Task.next_occurrence()`).
+- **Plan explanation** — a human-readable breakdown of what was planned, skipped, and why (`Plan.explain()`).
+
 ## Getting started
 
 ### Setup
@@ -173,12 +188,115 @@ Two complementary orderings:
 
 ## 📸 Demo Walkthrough
 
-Describe your app in numbered steps so a reader can follow along without watching a video:
+PawPal+ runs two ways: an interactive **Streamlit UI** (`streamlit run app.py`) for
+day-to-day use, and a **command-line demo** (`python main.py`) that prints a full
+scheduling run to the terminal.
 
-1. <!-- Describe this step -->
-2. <!-- Describe this step -->
-3. <!-- Describe this step -->
-4. <!-- Describe this step -->
-5. <!-- Add more steps as needed -->
+### The UI at a glance
 
-**Screenshot or video** *(optional)*: <!-- Insert a screenshot or link to a demo video here -->
+The Streamlit app is a single scrolling page with three areas:
+
+- **Owner & pet** — enter the owner's name, the pet's name, and species. These
+  persist across reruns, so tasks you add aren't lost.
+- **Tasks** — add a care task with a title, duration, priority, and an optional
+  preferred hour (leave at `-1` for "any time"). The current tasks show in a table
+  sorted chronologically, with a `done` column. A **Mark done** control lets you
+  complete a task without deleting it — and if it's a daily/weekly task, its next
+  occurrence is added back automatically.
+- **Build Schedule** — set the day's available minutes and start hour, then click
+  **Generate schedule**. The app shows the ordered plan, a success summary, any
+  conflict warnings, tasks that were moved off their preferred time, tasks skipped
+  for lack of budget, and an expandable "Why this plan?" reasoning panel.
+
+### Example workflow
+
+1. Enter the owner (**Jordan**) and a pet (**Mochi**, a dog).
+2. Add a few tasks — e.g. a high-priority *Morning walk* (30 min) preferred at 08:00,
+   a *Feeding* (10 min) at 09:00, and a *Fetch / play* (20 min) at 17:00.
+3. Add a second pet's task that wants the same 08:00 slot (e.g. Biscuit's *Vet call*)
+   to see conflict handling.
+4. Set **Time available today** to 120 minutes and **Start the day at** to hour 8.
+5. Click **Generate schedule** and read today's plan, warnings, and reasoning.
+6. Click **Mark done** on the walk — because it's a daily task, tomorrow's walk
+   reappears in the task list.
+
+### Key Scheduler behaviors you'll see
+
+- **Priority-first + time sorting** — high-priority tasks win the budget, and the
+  final plan reads top-to-bottom in clock order (`Scheduler.sort_tasks()`, `Task.sort_key()`).
+- **Conflict warnings** — two tasks requesting 08:00 raise a non-fatal warning
+  naming both tasks and whether they belong to the *same* or *different* pets
+  (`Scheduler.detect_conflicts()`).
+- **Preferred-time bumping** — the plan still resolves the overlap by moving the
+  later task and flagging it as *moved* (`ScheduledTask.bumped`).
+- **Budget filtering & end-of-day cutoff** — tasks that don't fit the available
+  minutes, or that would run past the day's end, are listed as skipped.
+- **Recurrence** — completing a daily/weekly task spawns its next occurrence
+  (`Task.mark_complete()`).
+
+### Sample CLI output
+
+Running `python main.py` walks through sorting, filtering, recurrence, conflict
+detection, and the final schedule:
+
+```
+====================================================
+All tasks, sorted chronologically by preferred time
+====================================================
+      08:00  Morning walk (30 min) [priority: high]
+      08:00  Vet call (20 min) [priority: high]
+      09:00  Feeding (10 min) [priority: high]
+      09:30  Feeding (10 min) [priority: high]
+      17:00  Fetch / play (20 min) [priority: medium]
+      19:00  Grooming (25 min) [priority: low]
+  (no time)  Litter box (5 min) [priority: medium]
+
+====================================================
+Filter: only Mochi's tasks (sorted by time)
+====================================================
+      08:00  Morning walk (30 min) [priority: high]
+      09:00  Feeding (10 min) [priority: high]
+      17:00  Fetch / play (20 min) [priority: medium]
+
+====================================================
+Filter: open vs. completed tasks
+====================================================
+  Open (6):
+    - Fetch / play (20 min) [priority: medium]
+    - Morning walk (30 min) [priority: high]
+    - Feeding (10 min) [priority: high]
+    - Litter box (5 min) [priority: medium]
+    - Feeding (10 min) [priority: high]
+    - Vet call (20 min) [priority: high]
+  Completed (1):
+    - Grooming (25 min) [priority: low]
+
+====================================================
+Recurrence: complete Mochi's daily walk
+====================================================
+  Marked 'Morning walk' done (recurrence=daily).
+  Spawned next occurrence: open=True, same time=08:00
+  Mochi's open task count: 3 -> 3 (unchanged: one done, one fresh)
+
+====================================================
+Conflict detection
+====================================================
+  [!] 'Morning walk' (Mochi) at 08:00 overlaps 'Vet call' (Biscuit) at 08:00 [different pets]
+
+====================================================
+Today's Schedule for Jordan
+====================================================
+Planned:
+  08:00-08:20  Vet call (for Biscuit)
+  08:20-08:50  Morning walk (for Mochi)  [preferred 08:00 unavailable, moved]
+  09:00-09:10  Feeding (for Mochi)
+  09:30-09:40  Feeding (for Biscuit)
+  17:00-17:20  Fetch / play (for Mochi)
+  17:20-17:25  Litter box (for Biscuit)
+
+[!] Conflicts:
+  - 'Morning walk' (Mochi) at 08:00 overlaps 'Vet call' (Biscuit) at 08:00 [different pets]
+
+Total scheduled time: 95 min
+====================================================
+```
